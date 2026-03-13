@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YM Foodies Dynamic Order Form</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; margin: auto; }
+  input, select, textarea, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; }
+  button { background-color: #28a745; color: white; border: none; cursor: pointer; }
+  button:hover { background-color: #218838; }
+</style>
+</head>
+<body>
+
+<h2>Place Your Order</h2>
+
+<form id="orderForm">
+  <input type="text" name="name" placeholder="Full Name" required>
+  <input type="email" name="email" placeholder="Email" required>
+
+  <label for="product">Product:</label>
+  <select name="product" id="productSelect" required>
+    <option value="">Loading products...</option>
+  </select>
+
+  <label for="variant">Variant:</label>
+  <select name="variant" id="variantSelect" required>
+    <option value="">Select a product first</option>
+  </select>
+
+  <input type="number" name="quantity" placeholder="Quantity" required min="1">
+  <input type="number" name="totalPrice" placeholder="Total Price" required readonly>
+  <textarea name="notes" placeholder="Notes (optional)"></textarea>
+  <button type="submit">Submit Order</button>
+</form>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuWGQy_GS0ng_x6E0DdZJfOVTd3JcxSlcAKD0Drdv8X2uSah8rOdh6Mx4D0N-cBad3NQ/exec";
+
+const productSelect = document.getElementById('productSelect');
+const variantSelect = document.getElementById('variantSelect');
+const quantityInput = document.querySelector('input[name="quantity"]');
+const totalPriceInput = document.querySelector('input[name="totalPrice"]');
+
+let productsData = [];
+
+// Load products from Apps Script
+async function loadProducts() {
+  try {
+    const res = await fetch(SCRIPT_URL + "?action=products");
+    productsData = await res.json(); // [{ProductID, Product Name, Variant, Selling_Price, Cost, Stock}, ...]
+
+    const uniqueProducts = [...new Set(productsData.map(p => p['Product Name']))];
+
+    productSelect.innerHTML = '<option value="">Select a product</option>';
+    uniqueProducts.forEach(prod => {
+      const option = document.createElement('option');
+      option.value = prod;
+      option.textContent = prod;
+      productSelect.appendChild(option);
+    });
+  } catch (err) {
+    console.error(err);
+    productSelect.innerHTML = '<option value="">Failed to load products</option>';
+  }
+}
+
+// Populate variants when a product is selected
+productSelect.addEventListener('change', () => {
+  const selectedProduct = productSelect.value;
+  const variants = productsData.filter(p => p['Product Name'] === selectedProduct)
+                               .map(p => ({variant: p['Variant'], price: p['Selling_Price']}));
+
+  variantSelect.innerHTML = '<option value="">Select a variant</option>';
+  variants.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.variant;
+    opt.dataset.price = v.price;
+    opt.textContent = v.variant + " - ₱" + v.price;
+    variantSelect.appendChild(opt);
+  });
+
+  updateTotalPrice();
+});
+
+quantityInput.addEventListener('input', updateTotalPrice);
+variantSelect.addEventListener('change', updateTotalPrice);
+
+function updateTotalPrice() {
+  const selectedOption = variantSelect.selectedOptions[0];
+  if (!selectedOption) return;
+  const price = parseFloat(selectedOption.dataset.price) || 0;
+  const quantity = parseInt(quantityInput.value) || 0;
+  totalPriceInput.value = price * quantity;
+}
+
+// Submit order
+document.getElementById('orderForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const data = {
+    name: e.target.name.value,
+    email: e.target.email.value,
+    product: productSelect.value,
+    variant: variantSelect.value,
+    quantity: quantityInput.value,
+    totalPrice: totalPriceInput.value,
+    notes: e.target.notes.value
+  };
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    const json = await res.json();
+    if (json.status === "success") {
+      alert("Order placed successfully!");
+      e.target.reset();
+      variantSelect.innerHTML = '<option value="">Select a product first</option>';
+      totalPriceInput.value = '';
+    } else {
+      alert("Error: " + json.message);
+    }
+  } catch (err) {
+    alert("Request failed: " + err);
+  }
+});
+
+// Load products on page load
+loadProducts();
+</script>
+
+</body>
+</html>
